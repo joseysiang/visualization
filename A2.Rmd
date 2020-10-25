@@ -1,0 +1,206 @@
+---
+title: "Assignment02"
+author: "Fangzhou Xiang, Jemma Rong"
+date: "11/20/2019"
+output: html_document
+---
+
+# Introduction
+In this assignment, we create faceted visualization and leaflet maps using the World Development Indicators data. The faceted visualization will display the trends of CO2 emissions, health exp% and internet usage in five countries: US, Brazil, Russian Federation, India and China. Leaflet maps show the worldwide birth rate (per thousand people) in 1998 and 2017.
+
+## Step 1: library calls to load packages
+```{r}
+rm(list = ls())
+```
+
+```{r, warning=FALSE, message=FALSE}  
+library(tidyverse)
+library(leaflet)
+library(WDI)
+library(ggplot2)
+library(plotly)
+library(data.table)
+library(shiny)
+```
+
+## Step 2:  Call package `WDI` to retrieve most updated figures available.
+
+In this assignment, we will fetch ten data series from the WDI:
+
+|Tableau Name	|WDI Series
+|----------------|:-----------------|
+|Birth Rate	|SP.DYN.CBRT.IN|
+|Infant Mortality Rate	|SP.DYN.IMRT.IN|
+|Internet Usage	|IT.NET.USER.ZS|
+|Life Expectancy (Total)	|SP.DYN.LE00.IN|
+|Forest Area (% of land) | AG.LND.FRST.ZS |
+|Mobile Phone Usage	|IT.CEL.SETS.P2|
+|Population Total	|SP.POP.TOTL|
+|International Tourism receipts (current US$)|ST.INT.RCPT.CD|
+|Import value index (2000=100) | TM.VAL.MRCH.XD.WD|
+|Export value index (2000=100) | TX.VAL.MRCH.XD.WD|
+
+
+The next code chunk will call the WDI API and fetch the years 1998 through 2018, as available. You will find that only a few variables have data for 2018. The dataframe will also contain the longitude and latitude of the capital city in each country.
+
+*Note* This notebook will take approximately 2 minutes to run. The WDI call is time-consuming as is the process of knitting the file. Be patient.
+
+The World Bank uses a complex, non-intuitive scheme for naming variables. For example, the Birth Rate series is called `SP.DYN.CBRT,IN`.  The code assigns variables names that are more intuitive than the codes assigned by the World Bank, and converts the geocodes from factors to numbers. 
+
+In your code, you will use the data frame called `countries`.
+
+```{r}
+birth <- "SP.DYN.CBRT.IN"
+infmort <- "SP.DYN.IMRT.IN"
+net <-"IT.NET.USER.ZS"
+lifeexp <- "SP.DYN.LE00.IN"
+forest <- "AG.LND.FRST.ZS"
+mobile <- "IT.CEL.SETS.P2"
+pop <- "SP.POP.TOTL"
+tour <- "ST.INT.RCPT.CD"
+import <- "TM.VAL.MRCH.XD.WD"
+export <- "TX.VAL.MRCH.XD.WD"
+
+# create a vector of the desired indicator series
+indicators <- c(birth, infmort, net, lifeexp, forest,
+                mobile, pop, tour, import, export)
+
+countries <- WDI(country="all", indicator = indicators, 
+     start = 1998, end = 2018, extra = TRUE)
+
+## rename columns for each of reference
+countries <- rename(countries, birth = SP.DYN.CBRT.IN, 
+       infmort = SP.DYN.IMRT.IN, net  = IT.NET.USER.ZS,
+       lifeexp = SP.DYN.LE00.IN, forest = AG.LND.FRST.ZS,
+       mobile = IT.CEL.SETS.P2, pop = SP.POP.TOTL, 
+       tour = ST.INT.RCPT.CD, import = TM.VAL.MRCH.XD.WD,
+       export = TX.VAL.MRCH.XD.WD)
+
+# convert geocodes from factors into numerics
+
+countries$lng <- as.numeric(as.character(countries$longitude))
+countries$lat <- as.numeric(as.character(countries$latitude))
+
+# Remove groupings, which have no geocodes
+countries <- countries %>%
+   filter(!is.na(lng))
+```
+
+## A Glimpse of the new dataframe
+
+```{r}
+glimpse(countries)
+```
+
+#Graphing and Comments
+
+Beyond this line, you will insert your original code, following the instructions in the assignment. 
+
+## Plot from Phase 1
+
+When dealing with the facet visualization, we first select the data we need and eventually choose the columns: Country, Internet_Usage, CO2_Emissions, Health_Expend and Year. In the Country column, we filter the five countries: US, Brazil, Russian Federation, India and China. Then we come to the problem that with the original data, we cannot draw facet visualization using the facet_grid layer in ggplot2 and ggplotly. Then we tidy the data according to the lessons we learned in Datacamp. When dealing with iris dataset, a wide format containing key and value is used. After tidying the data, we use face_grid layer in ggplot2 to finish the graph. 
+
+```{r}
+# your code goes here
+# data filter
+WI <- fread(file="/Users/jocelyn_x/Desktop/2019Fall/BUS-240f\ Information\ Visualization/assignment03/World\ Indicators.csv",
+            select=c("Country", "Year", "Internet Usage", "CO2 Emissions", "Health Exp % GDP"),
+            col.names = c("Country", "Year", "Internet_Usage", "CO2_Emissions", "Health_Exp"))
+WI_5C <- WI[WI$Country=="United States"|WI$Country=="Brazil"|WI$Country=="Russian Federation"|WI$Country=="India"|WI$Country=="China",]   
+
+WI_5C <- WI_5C %>% mutate(YEAR=year(as.POSIXct(Year, format = "%d/%m/%Y"))) 
+
+WI_5C <- WI_5C %>% mutate(
+  Internet_Usage=as.numeric(unlist(strsplit(WI_5C$Internet_Usage,"%"))),
+  Health_Exp=as.numeric(unlist(strsplit(WI_5C$Health_Exp,"%"))),
+  CO2_Emissions=CO2_Emissions/1000)
+
+WI_5C=WI_5C[c(1,3,4,5,6)]
+
+
+colnames(WI_5C) <- c("Country", "Internet_Usage (%)","CO2_Emissions (thousand)","Health_Expend (% of GDP)","Year")
+
+WI_5C_wide <- WI_5C %>% gather(key, value, -Country,-Year)
+```
+
+```{r}
+# interactive plot
+library(plotly)
+i<-ggplot(data=WI_5C_wide, aes(x = Year, y = value, col=key))+
+  geom_line()+
+  facet_grid(key~Country, scale = "free")+
+  ylab("")+
+  xlab("Year")+
+  labs(col = "",title = "Three Important Measurements of Five Countries (2000-2012)")+
+  scale_color_brewer(palette="Set2")+
+  scale_x_continuous(breaks = seq(2000, 2012, 6))+
+  theme_minimal()+
+  theme(axis.text = element_text(size = 6),
+        strip.text.x = element_text(size = 8, colour="black",face="bold"),
+        strip.text.y=element_text(size = 6, colour = "black",face="bold"),
+        strip.background=element_rect(colour="white",fill="white"),
+        panel.spacing=unit(1,"lines"),
+        legend.text=element_text(colour="black",size=7),
+        legend.title = element_blank(),
+        plot.caption = element_text(hjust = 1))
+
+
+ggplotly(i)%>%layout(legend=list(x=100, y=0.5), tooltip=c("Year", "Value"))
+
+
+```
+
+
+## World map showing a variable in 1998
+
+The first map shows the worldwide birth rate in 1998. We checked the visualizations on the World Bank website and found that the birth rate they display uses the unit of per thousand people and the unit is omitted when shown in the map. Therefore, to be aligned with the webside, we also omit the unit in the following maps.
+
+When dealing with the map, I noticed that the variable is continuous, so I use gradient color to show its value. The reason why I choose green is that it represents new life and hope. I also use popups to better guide the views to take a close look at our circles by showing the country name and its birth rate.
+
+My insights towards the map are as follows: Africa has a relatively high birth rate compared to other continents. Birth rates in African countries are in the darker green, mostly higher than 40%. In contrast, most European countries have lower birth rate than other countries. 
+
+
+
+```{r}
+# your code goes here
+subset = countries[countries$year == 1998,c(2,3,4,17,18)]
+subset$longitude = as.numeric(as.character(subset$longitude))
+subset$latitude = as.numeric(as.character(subset$latitude))
+subset$birth = round(subset$birth,2)
+subset = na.omit(subset)
+
+pal <- colorNumeric(
+  palette = "Greens",
+  domain = subset$birth)
+
+map1998 <- leaflet::leaflet(data = subset) %>%
+  addProviderTiles("OpenStreetMap") %>%
+  setView(lng = -20, lat = 20, zoom = 1.5) %>% 
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, stroke = FALSE, fillOpacity = 0.8, color = ~pal(birth),radius = 10, popup = ~paste0("<b>",country,"</b>","<br/>", birth)) %>%
+  addLegend("bottomright", pal = pal, values = ~birth,title = "Birth Rate(1998)",opacity = 1) 
+map1998
+
+```
+
+## World map showing the same variable recently
+
+In this part, I just use the similar method to draw the map and only change "year" to 2017. After comparing these two maps, I sense that the birth rates in most countries have decreased from 1998 to 2017. European countries still remain their low birth rate while African countries still bear the relatively high birth rate. Puerto Rico and Korea are the only two countries with the birth rate less than 10%.
+
+```{r, warning=FALSE}
+# your code goes here
+subset_new = countries[countries$year == 2017,c(2,3,4,17,18)]
+subset_new$longitude = as.numeric(as.character(subset_new$longitude))
+subset_new$latitude = as.numeric(as.character(subset_new$latitude))
+subset_new$birth = round(subset_new$birth,2)
+subset_new = na.omit(subset_new)
+
+map2017 <- leaflet::leaflet(data = subset_new) %>%
+  addProviderTiles("OpenStreetMap") %>%
+  setView(lng = -20, lat = 20, zoom = 1.5) %>% 
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, stroke = FALSE, fillOpacity = 0.8, color = ~pal(birth),radius = 10, popup = ~paste0("<b>",country,"</b>","<br/>", birth)) %>%
+  addLegend("bottomright", pal = pal, values = ~birth,title = "Birth Rate(2017)",opacity = 1) 
+map2017
+
+```
+
+
