@@ -1,10 +1,3 @@
----
-title: "Assignment02"
-author: "Fangzhou Xiang, Jemma Rong"
-date: "11/20/2019"
-output: html_document
----
-
 # Introduction
 In this assignment, we create faceted visualization and leaflet maps using the World Development Indicators data. The faceted visualization will display the trends of CO2 emissions, health exp% and internet usage in five countries: US, Brazil, Russian Federation, India and China. Leaflet maps show the worldwide birth rate (per thousand people) in 1998 and 2017.
 
